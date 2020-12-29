@@ -151,7 +151,7 @@ func main() {
 			if amo.CommonAnnotations.Summary != "" {
 				summaryDescription = amo.CommonAnnotations.Summary
 			} else {
-				summaryDescription = fmt.Sprintf("Severity:%s%s Cluster:%s Description:%s",amo.CommonLabels.Severity, severityLevel, amo.CommonLabels.Cluster, amo.CommonLabels.Alertname)
+				summaryDescription = fmt.Sprintf("Severity: %s %s Cluster: %s Description: %s",amo.CommonLabels.Severity, severityLevel, amo.CommonLabels.Cluster, amo.CommonLabels.Alertname)
 			}
 
 			RichEmbed := discordEmbed{
