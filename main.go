@@ -25,6 +25,7 @@ type alertManAlert struct {
 	Annotations struct {
 		Description string `json:"description"`
 		Summary     string `json:"summary"`
+		Message     string `json:"message"`
 	} `json:"annotations"`
 	EndsAt       string            `json:"endsAt"`
 	GeneratorURL string            `json:"generatorURL"`
@@ -40,6 +41,8 @@ type alertManOut struct {
 	} `json:"commonAnnotations"`
 	CommonLabels struct {
 		Alertname string `json:"alertname"`
+		Cluster string `json:"k8s_cluster_name"`
+		Severity string `json:"severity"`
 	} `json:"commonLabels"`
 	ExternalURL string `json:"externalURL"`
 	GroupKey    string `json:"groupKey"`
@@ -100,6 +103,7 @@ func main() {
 	log.Printf("Listening on: %s", *listenAddress)
 	http.ListenAndServe(*listenAddress, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		b, err := ioutil.ReadAll(r.Body)
+		log.Printf("Have got an alert.")
 		if err != nil {
 			panic(err)
 		}
@@ -118,25 +122,55 @@ func main() {
 
 		for status, alerts := range groupedAlerts {
 			DO := discordOut{}
+			icon := ""
+			summaryDescription := ""
+			severityLevel := ""
+			color := 0
 
-			RichEmbed := discordEmbed{
-				Title:       fmt.Sprintf("[%s:%d] %s", strings.ToUpper(status), len(alerts), amo.CommonLabels.Alertname),
-				Description: amo.CommonAnnotations.Summary,
-				Color:       ColorGrey,
-				Fields:      []discordEmbedField{},
+			switch amo.CommonLabels.Severity {
+			case "none":
+				severityLevel = ":speaking_head:"
+			case "info":
+				severityLevel = ":information_source:"
+			case "warning":
+				severityLevel = ":eyes:"
+			case "critical":
+				severityLevel = ":skull:"
+			default:
+				severityLevel = ":grey_question:"
 			}
 
 			if status == "firing" {
-				RichEmbed.Color = ColorRed
-			} else if status == "resolved" {
-				RichEmbed.Color = ColorGreen
-			}
+                                color = ColorRed
+				icon = ":fire:"
+                        } else if status == "resolved" {
+                                color = ColorGreen
+				icon = ":woman_firefighter:"
+                        }
 
 			if amo.CommonAnnotations.Summary != "" {
-				DO.Content = fmt.Sprintf(" === %s === \n", amo.CommonAnnotations.Summary)
+				summaryDescription = amo.CommonAnnotations.Summary
+			} else {
+				summaryDescription = fmt.Sprintf("Severity:%s%s Cluster:%s Description:%s",amo.CommonLabels.Severity, severityLevel, amo.CommonLabels.Cluster, amo.CommonLabels.Alertname)
 			}
 
+			RichEmbed := discordEmbed{
+				Title:       fmt.Sprintf("%s[%s:%d] %s %s",icon, strings.ToUpper(status), len(alerts), amo.CommonLabels.Alertname, icon),
+				Description: summaryDescription,
+				Color:       color,
+				Fields:      []discordEmbedField{},
+			}
+
+			//DO.Content = summaryDescription
+
 			for _, alert := range alerts {
+				alertDescription := ""
+				if alert.Annotations.Description != "" {
+					alertDescription = alert.Annotations.Description
+				} else {
+					alertDescription = alert.Annotations.Message
+				}
+
 				realname := alert.Labels["instance"]
 				if strings.Contains(realname, "localhost") && alert.Labels["exported_instance"] != "" {
 					realname = alert.Labels["exported_instance"]
@@ -144,14 +178,21 @@ func main() {
 
 				RichEmbed.Fields = append(RichEmbed.Fields, discordEmbedField{
 					Name:  fmt.Sprintf("[%s]: %s on %s", strings.ToUpper(status), alert.Labels["alertname"], realname),
-					Value: alert.Annotations.Description,
+					Value: alertDescription,
 				})
 			}
 
 			DO.Embeds = []discordEmbed{RichEmbed}
 
 			DOD, _ := json.Marshal(DO)
-			http.Post(*whURL, "application/json", bytes.NewReader(DOD))
+			log.Printf(string(DOD))
+			log.Printf("Have sent an alert to Discord")
+			resp, err := http.Post(*whURL, "application/json", bytes.NewReader(DOD))
+			if err != nil {
+				log.Fatal(err)
+			}
+			log.Printf("HTTP Response Status:", resp.StatusCode, http.StatusText(resp.StatusCode))
+
 		}
 	}))
 }
