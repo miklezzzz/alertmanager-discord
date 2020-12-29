@@ -185,7 +185,6 @@ func main() {
 			DO.Embeds = []discordEmbed{RichEmbed}
 
 			DOD, _ := json.Marshal(DO)
-			log.Printf(string(DOD))
 			log.Printf("Have sent an alert to Discord")
 			resp, err := http.Post(*whURL, "application/json", bytes.NewReader(DOD))
 			if err != nil {
